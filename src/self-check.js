@@ -1,5 +1,5 @@
+'use strict';
 const { SchoolFinder } = require('./searchSchool');
-
 exports.SelfChecker = /** @class */ (function () {
     const {
         Jsoup,
@@ -16,10 +16,10 @@ exports.SelfChecker = /** @class */ (function () {
      * @param {string?} schoolCode - 학교 코드
      * @constructor
      */
-    function SelfChecker(name, birthday, school, region, kind, password, schoolCode) {
-        if (kind === void 0) this.kind = '';
-        if (password === void 0) this.password = '1234';
-        if (schoolCode === void 0) this.schoolCode = '';
+    function SelfChecker(config) {
+        if (config.kind === void 0) this.kind = '';
+        if (config.password === void 0) this.password = '1234';
+        if (config.schoolCode === void 0) this.schoolCode = '';
         this.url = {
             '서울': 'https://senhcs.eduro.go.kr',
             '부산': 'https://penhcs.eduro.go.kr',
@@ -47,14 +47,19 @@ exports.SelfChecker = /** @class */ (function () {
             ]
         };
         this.userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1';
-        this.name = name;
-        this.birthday = birthday;
-        this.school = school;
-        this.region = region;
-        this.kind = kind;
-        this.password = password;
-        this.schoolCode = schoolCode;
-        this.hostURI = this.url[region];
+        this.name = config.name;
+        this.birthday = config.birthday;
+        this.school = config.school;
+        this.region = config.region;
+        this.kind = config.kind;
+        this.password = config.password;
+        this.schoolCode = config.schoolCode;
+        this.localURI = this.url[config.region];
+        this.headers = {
+            'contentType': ['Content-Type', 'application/json; Charset=UTF-8'],
+            'origin': ['Origin', 'https://hcs.eduro.go.kr'],
+            'referer': ['Referer', 'https://hcs.eduro.go.kr/']
+        };
         return this;
     }
     /**
@@ -65,7 +70,7 @@ exports.SelfChecker = /** @class */ (function () {
      * @private
      */
     SelfChecker.prototype.encrypt = function (message) {
-        const key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA81dCnCKt0NVH7j5Oh2+SGgEU0aqi5u6sYXemouJWXOlZO3jqDsHYM1qfEjVvCOmeoMNFXYSXdNhflU7mjWP8jWUmkYIQ8o3FGqMzsMTNxr+bAp0cULWu9eYmycjJwWIxxB7vUwvpEUNicgW7v5nCwmF5HS33Hmn7yDzcfjfBs99K5xJEppHG0qc+q3YXxxPpwZNIRFn0Wtxt0Muh1U8avvWyw03uQ/wMBnzhwUC8T4G5NclLEWzOQExbQ4oDlZBv8BM/WxxuOyu0I8bDUDdutJOfREYRZBlazFHvRKNNQQD2qDfjRz484uFs7b5nykjaMB9k/EJAuHjJzGs9MMMWtQIDAQAB";
+        const key = new java.lang.String("MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA81dCnCKt0NVH7j5Oh2+SGgEU0aqi5u6sYXemouJWXOlZO3jqDsHYM1qfEjVvCOmeoMNFXYSXdNhflU7mjWP8jWUmkYIQ8o3FGqMzsMTNxr+bAp0cULWu9eYmycjJwWIxxB7vUwvpEUNicgW7v5nCwmF5HS33Hmn7yDzcfjfBs99K5xJEppHG0qc+q3YXxxPpwZNIRFn0Wtxt0Muh1U8avvWyw03uQ/wMBnzhwUC8T4G5NclLEWzOQExbQ4oDlZBv8BM/WxxuOyu0I8bDUDdutJOfREYRZBlazFHvRKNNQQD2qDfjRz484uFs7b5nykjaMB9k/EJAuHjJzGs9MMMWtQIDAQAB");
         const bytes = java.util.Base64.getDecoder().decode(key);
         const keyFactory = java.security.KeyFactory.getInstance("RSA");
         const publicKey = keyFactory.generatePublic(new java.security.spec.X509EncodedKeySpec(bytes));
@@ -87,9 +92,10 @@ exports.SelfChecker = /** @class */ (function () {
     /**
      * 
      * @returns {string}
+     * @private
      */
     SelfChecker.prototype.getFirstToken = function () {
-        const url = this.url[this.region] + this.url.path[0];
+        const url = this.localURI + this.url.path[0];
         this.setSchoolCode();
         const data = {
             'orgCode': this.schoolCode,
@@ -101,13 +107,14 @@ exports.SelfChecker = /** @class */ (function () {
 
         const response = Jsoup.connect(url)
             .method(Connection.Method.POST)
+            .ignoreContentType(true)
             .userAgent(this.userAgent)
-            .header('Content-Type', 'application/json; Charset=UTF-8')
-            .header('Origin', 'https://hcs.eduro.go.kr')
-            .header('Referer', 'https://hcs.eduro.go.kr/')
+            .header(this.headers.contentType[0], this.headers.contentType[1])
+            .header(this.headers.origin[0], this.headers.origin[1])
+            .header(this.headers.referer[0], this.headers.referer[1])
             .requestBody(JSON.stringify(data))
             .execute();
-        const document = JSON.parse(response.parse());
+        const document = JSON.parse(response.parse().wholeText());
         this.school = document.orgName;
         const { token } = document;
         return token;
@@ -115,45 +122,49 @@ exports.SelfChecker = /** @class */ (function () {
     /**
      * 
      * @returns {string}
+     * @private
      */
     SelfChecker.prototype.getSecondToken = function () {
         const requestToken = this.getFirstToken();
-        const url = this.url[this.region] + this.url.path[1];
+        const url = this.localURI + this.url.path[1];
         const data = {
             'password': this.encrypt(this.password),
             'deviceUuid': ''
         };
         const response = Jsoup.connect(url)
             .method(Connection.Method.POST)
+            .ignoreContentType(true)
             .userAgent(this.userAgent)
             .header('Authorization', requestToken)
-            .header('Content-Type', 'application/json; Charset=UTF-8')
-            .header('Origin', 'https://hcs.eduro.go.kr')
-            .header('Referer', 'https://hcs.eduro.go.kr/')
+            .header(this.headers.contentType[0], this.headers.contentType[1])
+            .header(this.headers.origin[0], this.headers.origin[1])
+            .header(this.headers.referer[0], this.headers.referer[1])
             .requestBody(JSON.stringify(data))
             .execute();
         const document = response.parse();
-        const token = document.text();
+        const token = String(document.text()).replace(/"/g, '');
         return token;
     };
     /**
      * 
      * @returns {string}
+     * @private
      */
     SelfChecker.prototype.getThirdToken = function () {
         const requestToken = this.getSecondToken();
-        const url = this.url[this.region] + this.url.path[2];
+        const url = this.localURI + this.url.path[2];
         const data = {};
         const response = Jsoup.connect(url)
             .method(Connection.Method.POST)
+            .ignoreContentType(true)
             .userAgent(this.userAgent)
             .header('Authorization', requestToken)
-            .header('Content-Type', 'application/json; Charset=UTF-8')
-            .header('Origin', 'https://hcs.eduro.go.kr')
-            .header('Referer', 'https://hcs.eduro.go.kr/')
+            .header(this.headers.contentType[0], this.headers.contentType[1])
+            .header(this.headers.origin[0], this.headers.origin[1])
+            .header(this.headers.referer[0], this.headers.referer[1])
             .requestBody(JSON.stringify(data))
             .execute();
-        const document = JSON.parse(response.parse());
+        const document = JSON.parse(response.parse().wholeText());
         this.userPNo = document[0].userPNo;
         const { token } = document[0];
         return token;
@@ -166,7 +177,7 @@ exports.SelfChecker = /** @class */ (function () {
         const region = this.region;
         const kind = this.kind;
         const schoolCode = this.schoolCode;
-        const url = this.url[this.region] + this.url.path[4];
+        const url = this.localURI + this.url.path[4];
         const data = {
             'rspns01': '1',
             'rspns02': '1',
@@ -190,14 +201,15 @@ exports.SelfChecker = /** @class */ (function () {
         };
         const response = Jsoup.connect(url)
             .method(Connection.Method.POST)
+            .ignoreContentType(true)
             .userAgent(this.userAgent)
             .header('Authorization', token)
-            .header('Content-Type', 'application/json; Charset=UTF-8')
-            .header('Origin', 'https://hcs.eduro.go.kr')
-            .header('Referer', 'https://hcs.eduro.go.kr/')
+            .header(this.headers.contentType[0], this.headers.contentType[1])
+            .header(this.headers.origin[0], this.headers.origin[1])
+            .header(this.headers.referer[0], this.headers.referer[1])
             .requestBody(JSON.stringify(data))
             .execute();
-        const document = JSON.parse(response.parse());
+        const document = JSON.parse(response.parse().wholeText());
         const checkTime = document.inveYmd;
         const result = {
             'name': name,

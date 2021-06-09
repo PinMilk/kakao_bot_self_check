@@ -8,8 +8,8 @@ exports.SchoolFinder = /** @class */ (function () {
      */
     function SchoolFinder(name, region, kind) {
         this.name = name;
-        this. region = region;
-        this.kind = kind;
+        this.region = region;
+        this.kind = kind || '';
         this.regionCode = {
             "서울": "01",
             "부산": "02",
@@ -43,15 +43,13 @@ exports.SchoolFinder = /** @class */ (function () {
      * @returns {any}
      */
     SchoolFinder.prototype.find = function(){
-        const response = org.jsoup.Jsoup.connect('https://hcs.eduro.go.kr/v2/searchSchool')
+        let response = org.jsoup.Jsoup.connect('https://hcs.eduro.go.kr/v2/searchSchool?lctnScCode=' + this.regionCode[this.region] + '&' +  (!!this.kind ? ('schulCrseScCode' + this.schoolKind[this.kind] + '&' ): '' ) +  'orgName='  + encodeURI(this.name))
+            .ignoreContentType(true)
             .userAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1')
-            .data('lctnScCode', this.regionCode[this.region])
-            .data('schulCrseScCode', this.schoolKind[this.kind] || '')
-            .data('orgName', encodeURI(this.name))
             .execute();
         const document = response.parse();
         const result = JSON.parse(document.wholeText());
-        return result;
+        return result.schulList[0];
     }
     /**
      * 
